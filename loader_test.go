@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"io/ioutil"
 	"log"
+	"syscall"
 	"testing"
 
 	"github.com/Binject/debug/pe"
@@ -24,6 +25,20 @@ func Test_Windows_1(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	mainDLL, err := syscall.LoadDLL("main")
+	if err != nil {
+		panic(err)
+	}
+	runMe, err := mainDLL.FindProc("Runme")
+	if err != nil {
+		panic(err)
+	}
+	output, _, err := runMe.Call(7)
+	if err != nil {
+		panic(err)
+	}
+	println(output)
 
 	/*
 	   package main
