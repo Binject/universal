@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"io/ioutil"
 	"log"
+	"syscall"
 	"testing"
 
 	"github.com/Binject/debug/pe"
@@ -36,6 +37,13 @@ func Test_Windows_1(t *testing.T) {
 		log.Fatal(err)
 	}
 	log.Printf("Exported Symbols from Loaded DLL: %+v\n", exports)
+
+	runmeProc := dst + uintptr(exports[0].VirtualAddress)
+	var a []uintptr
+	a = append(a, uintptr(7))
+
+	r1, r2, errno := syscall.Syscall(runmeProc, uintptr(len(a)), a[0], 0, 0)
+	log.Println(r1, r2, errno)
 
 	/*
 		// This would work with a PEB write:
