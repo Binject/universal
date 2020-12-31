@@ -6,10 +6,10 @@ import (
 	"bytes"
 	"io/ioutil"
 	"log"
-	"syscall"
 	"testing"
 
 	"github.com/Binject/debug/pe"
+	"github.com/awgh/rawreader"
 )
 
 func Test_Windows_1(t *testing.T) {
@@ -21,43 +21,37 @@ func Test_Windows_1(t *testing.T) {
 		log.Fatal(err)
 	}
 
-	err = LoadLibrary(pefile, &image)
+	dst, err := LoadLibrary(pefile, &image)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	mainDLL, err := syscall.LoadDLL("main")
+	loadedDll, err := pe.NewFileFromMemory(rawreader.New(dst, int(^uint(0)>>1)))
 	if err != nil {
-		panic(err)
+		t.Fatal(err)
 	}
-	runMe, err := mainDLL.FindProc("Runme")
+
+	exports, err := loadedDll.Exports()
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
-	output, _, err := runMe.Call(7)
-	if err != nil {
-		panic(err)
-	}
-	println(output)
+	log.Printf("Exported Symbols from Loaded DLL: %+v\n", exports)
 
 	/*
-	   package main
-	   import "syscall"
-	   func main() {
-	   	mainDLL, err := syscall.LoadDLL("main")
-	   	if err != nil {
-	   		panic(err)
-	   	}
-	   	runMe, err := mainDLL.FindProc("Runme")
-	   	if err != nil {
-	   		panic(err)
-	   	}
-	   	output, _, err := runMe.Call(7)
-	   	if err != nil {
-	   		panic(err)
-	   	}
-	   	println(output)
-	   }
+		// This would work with a PEB write:
+		mainDLL, err := syscall.LoadDLL("main")
+		if err != nil {
+			panic(err)
+		}
+		runMe, err := mainDLL.FindProc("Runme")
+		if err != nil {
+			panic(err)
+		}
+		output, _, err := runMe.Call(7)
+		if err != nil {
+			panic(err)
+		}
+		println(output)
 	*/
 
 	/*
@@ -82,7 +76,8 @@ func Test_Windows_1(t *testing.T) {
 }
 
 /*
-main.cpp
+// To build main.dll:
+// Filename: main.cpp
 #include "main.h"
 #define DLL_EXPORT
 extern "C" {
@@ -91,12 +86,7 @@ extern "C" {
     }
 }
 
-
-
-
-
-5:10
-main.h
+// Filename: main.h
 #ifndef MAIN_DLL_H
 #define MAIN_DLL_H
 #if defined DLL_EXPORT
@@ -108,9 +98,8 @@ extern "C" {
     int Runme(int var);
 }
 #endif
-5:10
-compile strings
+
+// To compile:
 g++ -c main.cpp
 g++ -shared -o main.dll main.o -W
-
 */

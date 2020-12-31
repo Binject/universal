@@ -4,6 +4,7 @@ package universal
 
 import (
 	"bytes"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"os"
@@ -83,7 +84,7 @@ func LoadLibraries(libraries []*Library) error {
 			}
 			if unsatisfiedCount == 0 {
 				// all dependencies are satisfied, try to load this one
-				err := LoadLibrary(lib.file, &lib.Data)
+				_, err := LoadLibrary(lib.file, &lib.Data)
 				if err == nil {
 					locallyLoadedLibs = append(locallyLoadedLibs, lib.Name)
 					lib.loaded = true
@@ -106,7 +107,7 @@ func LoadLibraries(libraries []*Library) error {
 }
 
 // LoadLibrary - loads a single library to memory, without trying to check or load required imports
-func LoadLibrary(pelib *pe.File, image *[]byte) error {
+func LoadLibrary(pelib *pe.File, image *[]byte) (uintptr, error) {
 	pe64 := pelib.Machine == pe.IMAGE_FILE_MACHINE_AMD64
 	var sizeOfImage uint32
 	if pe64 {
@@ -116,24 +117,37 @@ func LoadLibrary(pelib *pe.File, image *[]byte) error {
 	}
 	r, err := virtualAlloc(0, sizeOfImage, MEM_RESERVE, syscall.PAGE_READWRITE)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	dst, err := virtualAlloc(r, sizeOfImage, MEM_COMMIT, syscall.PAGE_EXECUTE_READWRITE)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	//perform base relocations
 	pelib.Relocate(uint64(dst), image)
 
 	//write to memory
-	CopySections(pelib, dst)
+	CopySections(pelib, image, dst)
 
-	return nil
+	return dst, nil
 }
 
 // CopySections - writes the sections of a PE image to the given base address in memory
-func CopySections(pefile *pe.File, loc uintptr) error {
+func CopySections(pefile *pe.File, image *[]byte, loc uintptr) error {
+	// Copy Headers
+	var sizeOfHeaders uint32
+	if pefile.Machine == pe.IMAGE_FILE_MACHINE_AMD64 {
+		sizeOfHeaders = pefile.OptionalHeader.(*pe.OptionalHeader64).SizeOfHeaders
+	} else {
+		sizeOfHeaders = pefile.OptionalHeader.(*pe.OptionalHeader32).SizeOfHeaders
+	}
+	hbuf := (*[^uint32(0)]byte)(unsafe.Pointer(uintptr(loc)))
+	for index := uint32(0); index < sizeOfHeaders; index++ {
+		hbuf[index] = (*image)[index]
+	}
+
+	// Copy Sections
 	for _, section := range pefile.Sections {
 		fmt.Println("Writing:", fmt.Sprintf("%s %x %x", section.Name, loc, uint32(loc)+section.VirtualAddress))
 		if section.Size == 0 {
@@ -150,6 +164,17 @@ func CopySections(pefile *pe.File, loc uintptr) error {
 			buf[index] = d[index]
 		}
 	}
+
+	// Write symbol and string tables
+	bbuf := bytes.NewBuffer(nil)
+	binary.Write(bbuf, binary.LittleEndian, pefile.COFFSymbols)
+	binary.Write(bbuf, binary.LittleEndian, pefile.StringTable)
+	b := bbuf.Bytes()
+	blen := uint32(len(b))
+	for index := uint32(0); index < blen; index++ {
+		hbuf[index+pefile.FileHeader.PointerToSymbolTable] = b[index]
+	}
+
 	return nil
 }
 
