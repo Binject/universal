@@ -1,28 +1,15 @@
-// +build windows
-
 package universal
 
 import (
 	"bytes"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"os"
 	"syscall"
 	"unsafe"
 
 	"github.com/Binject/debug/pe"
-
-	bananaphone "github.com/c-sto/BananaPhone/pkg/BananaPhone"
 )
-
-// Library - container struct for the DLL to load
-type Library struct {
-	Name   string
-	Data   []byte
-	file   *pe.File
-	loaded bool
-}
 
 const (
 	MEM_COMMIT                             = 0x001000
@@ -31,8 +18,123 @@ const (
 	INFINITE                               = 0xFFFFFFFF
 )
 
+// LoadLibraryImpl - loads a single library to memory, without trying to check or load required imports
+func LoadLibraryImpl(image *[]byte) (*Library, error) {
+	pelib, err := pe.NewFile(bytes.NewReader(*image))
+	if err != nil {
+		return nil, err
+	}
+	pe64 := pelib.Machine == pe.IMAGE_FILE_MACHINE_AMD64
+	var sizeOfImage uint32
+	if pe64 {
+		sizeOfImage = pelib.OptionalHeader.(*pe.OptionalHeader64).SizeOfImage
+	} else {
+		sizeOfImage = pelib.OptionalHeader.(*pe.OptionalHeader32).SizeOfImage
+	}
+	r, err := virtualAlloc(0, sizeOfImage, MEM_RESERVE, syscall.PAGE_READWRITE)
+	if err != nil {
+		return nil, err
+	}
+	dst, err := virtualAlloc(r, sizeOfImage, MEM_COMMIT, syscall.PAGE_EXECUTE_READWRITE)
+	if err != nil {
+		return nil, err
+	}
+
+	//perform base relocations
+	pelib.Relocate(uint64(dst), image)
+
+	//write to memory
+	CopySections(pelib, image, dst)
+
+	exports, err := pelib.Exports()
+	if err != nil {
+		return nil, err
+	}
+	lib := Library{
+		BaseAddress: dst,
+		Exports:     make(map[string]uint64),
+	}
+	for _, x := range exports {
+		lib.Exports[x.Name] = uint64(x.VirtualAddress)
+	}
+
+	return &lib, nil
+}
+
+// CopySections - writes the sections of a PE image to the given base address in memory
+func CopySections(pefile *pe.File, image *[]byte, loc uintptr) error {
+	// Copy Headers
+	var sizeOfHeaders uint32
+	if pefile.Machine == pe.IMAGE_FILE_MACHINE_AMD64 {
+		sizeOfHeaders = pefile.OptionalHeader.(*pe.OptionalHeader64).SizeOfHeaders
+	} else {
+		sizeOfHeaders = pefile.OptionalHeader.(*pe.OptionalHeader32).SizeOfHeaders
+	}
+	hbuf := (*[^uint32(0)]byte)(unsafe.Pointer(uintptr(loc)))
+	for index := uint32(0); index < sizeOfHeaders; index++ {
+		hbuf[index] = (*image)[index]
+	}
+
+	// Copy Sections
+	for _, section := range pefile.Sections {
+		fmt.Println("Writing:", fmt.Sprintf("%s %x %x", section.Name, loc, uint32(loc)+section.VirtualAddress))
+		if section.Size == 0 {
+			continue
+		}
+		d, err := section.Data()
+		if err != nil {
+			return err
+		}
+		dataLen := uint32(len(d))
+		dst := uint64(loc) + uint64(section.VirtualAddress)
+		buf := (*[^uint32(0)]byte)(unsafe.Pointer(uintptr(dst)))
+		for index := uint32(0); index < dataLen; index++ {
+			buf[index] = d[index]
+		}
+	}
+
+	// Write symbol and string tables
+	bbuf := bytes.NewBuffer(nil)
+	binary.Write(bbuf, binary.LittleEndian, pefile.COFFSymbols)
+	binary.Write(bbuf, binary.LittleEndian, pefile.StringTable)
+	b := bbuf.Bytes()
+	blen := uint32(len(b))
+	for index := uint32(0); index < blen; index++ {
+		hbuf[index+pefile.FileHeader.PointerToSymbolTable] = b[index]
+	}
+
+	return nil
+}
+
+var (
+	kernel32         = syscall.MustLoadDLL("kernel32.dll")
+	procVirtualAlloc = kernel32.MustFindProc("VirtualAlloc")
+)
+
+func virtualAlloc(addr uintptr, size, allocType, protect uint32) (uintptr, error) {
+	r1, _, e1 := procVirtualAlloc.Call(
+		addr,
+		uintptr(size),
+		uintptr(allocType),
+		uintptr(protect))
+
+	if int(r1) == 0 {
+		return r1, os.NewSyscallError("VirtualAlloc", e1)
+	}
+	return r1, nil
+}
+
+/*
+// Library - container struct for the DLL to load
+type Library struct {
+	Name   string
+	Data   []byte
+	file   *pe.File
+	loaded bool
+}
 // LoadLibraries loads a set of libraries
 // All dependencies must be provided or already loaded
+// This doesn't work yet, but this logic will end up somewhere at some point
 func LoadLibraries(libraries []*Library) error {
 
 	// retrieve already-loaded images from PEB
@@ -105,93 +207,4 @@ func LoadLibraries(libraries []*Library) error {
 	}
 	return nil
 }
-
-// LoadLibrary - loads a single library to memory, without trying to check or load required imports
-func LoadLibrary(pelib *pe.File, image *[]byte) (uintptr, error) {
-	pe64 := pelib.Machine == pe.IMAGE_FILE_MACHINE_AMD64
-	var sizeOfImage uint32
-	if pe64 {
-		sizeOfImage = pelib.OptionalHeader.(*pe.OptionalHeader64).SizeOfImage
-	} else {
-		sizeOfImage = pelib.OptionalHeader.(*pe.OptionalHeader32).SizeOfImage
-	}
-	r, err := virtualAlloc(0, sizeOfImage, MEM_RESERVE, syscall.PAGE_READWRITE)
-	if err != nil {
-		return 0, err
-	}
-	dst, err := virtualAlloc(r, sizeOfImage, MEM_COMMIT, syscall.PAGE_EXECUTE_READWRITE)
-	if err != nil {
-		return 0, err
-	}
-
-	//perform base relocations
-	pelib.Relocate(uint64(dst), image)
-
-	//write to memory
-	CopySections(pelib, image, dst)
-
-	return dst, nil
-}
-
-// CopySections - writes the sections of a PE image to the given base address in memory
-func CopySections(pefile *pe.File, image *[]byte, loc uintptr) error {
-	// Copy Headers
-	var sizeOfHeaders uint32
-	if pefile.Machine == pe.IMAGE_FILE_MACHINE_AMD64 {
-		sizeOfHeaders = pefile.OptionalHeader.(*pe.OptionalHeader64).SizeOfHeaders
-	} else {
-		sizeOfHeaders = pefile.OptionalHeader.(*pe.OptionalHeader32).SizeOfHeaders
-	}
-	hbuf := (*[^uint32(0)]byte)(unsafe.Pointer(uintptr(loc)))
-	for index := uint32(0); index < sizeOfHeaders; index++ {
-		hbuf[index] = (*image)[index]
-	}
-
-	// Copy Sections
-	for _, section := range pefile.Sections {
-		fmt.Println("Writing:", fmt.Sprintf("%s %x %x", section.Name, loc, uint32(loc)+section.VirtualAddress))
-		if section.Size == 0 {
-			continue
-		}
-		d, err := section.Data()
-		if err != nil {
-			return err
-		}
-		dataLen := uint32(len(d))
-		dst := uint64(loc) + uint64(section.VirtualAddress)
-		buf := (*[^uint32(0)]byte)(unsafe.Pointer(uintptr(dst)))
-		for index := uint32(0); index < dataLen; index++ {
-			buf[index] = d[index]
-		}
-	}
-
-	// Write symbol and string tables
-	bbuf := bytes.NewBuffer(nil)
-	binary.Write(bbuf, binary.LittleEndian, pefile.COFFSymbols)
-	binary.Write(bbuf, binary.LittleEndian, pefile.StringTable)
-	b := bbuf.Bytes()
-	blen := uint32(len(b))
-	for index := uint32(0); index < blen; index++ {
-		hbuf[index+pefile.FileHeader.PointerToSymbolTable] = b[index]
-	}
-
-	return nil
-}
-
-var (
-	kernel32         = syscall.MustLoadDLL("kernel32.dll")
-	procVirtualAlloc = kernel32.MustFindProc("VirtualAlloc")
-)
-
-func virtualAlloc(addr uintptr, size, allocType, protect uint32) (uintptr, error) {
-	r1, _, e1 := procVirtualAlloc.Call(
-		addr,
-		uintptr(size),
-		uintptr(allocType),
-		uintptr(protect))
-
-	if int(r1) == 0 {
-		return r1, os.NewSyscallError("VirtualAlloc", e1)
-	}
-	return r1, nil
-}
+*/
