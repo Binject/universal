@@ -3,6 +3,7 @@ package universal
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"os"
 	"syscall"
@@ -20,11 +21,18 @@ const (
 
 // LoadLibraryImpl - loads a single library to memory, without trying to check or load required imports
 func LoadLibraryImpl(image *[]byte) (*Library, error) {
+	const PtrSize = 32 << uintptr(^uintptr(0)>>63) // are we on a 32bit or 64bit system?
 	pelib, err := pe.NewFile(bytes.NewReader(*image))
 	if err != nil {
 		return nil, err
 	}
 	pe64 := pelib.Machine == pe.IMAGE_FILE_MACHINE_AMD64
+	if pe64 && PtrSize != 64 {
+		return nil, errors.New("Cannot load a 64bit DLL from a 32bit process")
+	} else if !pe64 && PtrSize != 32 {
+		return nil, errors.New("Cannot load a 32bit DLL from a 64bit process")
+	}
+
 	var sizeOfImage uint32
 	if pe64 {
 		sizeOfImage = pelib.OptionalHeader.(*pe.OptionalHeader64).SizeOfImage
