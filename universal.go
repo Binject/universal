@@ -1,10 +1,5 @@
 package universal
 
-import (
-	"errors"
-	"runtime"
-)
-
 // Library - describes a loaded library
 type Library struct {
 	Name        string
@@ -18,18 +13,14 @@ type Loader struct {
 }
 
 // NewLoader - returns a new instance of a Loader
-func NewLoader(useSystemLoader bool) (*Loader, error) {
-	if (runtime.GOOS == "darwin" && !useSystemLoader) ||
-		(runtime.GOOS != "darwin" && useSystemLoader) {
-		return nil, errors.New("Not implemented")
-	}
+func NewLoader() (*Loader, error) {
 	return &Loader{}, nil
 }
 
 // LoadLibrary - loads a library into this process from the given buffer
 func (l *Loader) LoadLibrary(name string, image *[]byte) (*Library, error) {
 
-	library, err := LoadLibraryImpl(image)
+	library, err := LoadLibraryImpl(name, image)
 	if err != nil {
 		return nil, err
 	}

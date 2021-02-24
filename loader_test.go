@@ -29,7 +29,7 @@ func Test_Windows_MSVC_1(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	loader, err := NewLoader(false)
+	loader, err := NewLoader()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,7 +69,7 @@ func Test_Windows_gcc_2(t *testing.T) {
 		image, err = ioutil.ReadFile("test\\32\\main.dll")
 	}
 
-	loader, err := NewLoader(false)
+	loader, err := NewLoader()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +101,7 @@ func Test_Windows_gcc_3(t *testing.T) {
 		image, err = ioutil.ReadFile("test\\32\\main.dll")
 	}
 
-	loader, err := NewLoader(false)
+	loader, err := NewLoader()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,7 +136,7 @@ func Test_Windows_WrongArch_4(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	loader, err := NewLoader(false)
+	loader, err := NewLoader()
 	if err != nil {
 		t.Fatal(err)
 	}

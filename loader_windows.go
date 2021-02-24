@@ -20,7 +20,7 @@ const (
 )
 
 // LoadLibraryImpl - loads a single library to memory, without trying to check or load required imports
-func LoadLibraryImpl(image *[]byte) (*Library, error) {
+func LoadLibraryImpl(name string, image *[]byte) (*Library, error) {
 	const PtrSize = 32 << uintptr(^uintptr(0)>>63) // are we on a 32bit or 64bit system?
 	pelib, err := pe.NewFile(bytes.NewReader(*image))
 	if err != nil {
