@@ -1,6 +1,6 @@
 # The Universal Loader
 
-This loader provides a unified interface for loading shared libraries from Golang on Windows, OSX, and Linux.  
+This loader provides a unified Go interface for loading shared libraries **from memory** on Windows, OSX, and Linux.
 
 Also included is a cross-platform `Call()` implementation that lets you call into exported symbols from those libraries without stress.
 
