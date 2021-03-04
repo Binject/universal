@@ -27,13 +27,14 @@ Complete working examples of usage can be found in the examples/ folder in this 
 
 ### Features and Limitations
 - OSX backend uses the system loader, so multiple interdependent libraries can be loaded.
+- OSX backend **automatically adds the underscore prefix for you**, so you can refer to symbols the same way on Linux, Windows, and OSX.
 - Linux and Windows backends do not use the system loader, so interdependent libraries cannot be loaded.
 - Linux backend does not use memfd!  
-*I believe this is the first Golang Linux loader that does not use memfd!*
+***I believe this is the first Golang Linux loader that does not use memfd!***
 
 ### Supported Architectures
 - OSX arm64 M1 Apple Chip (tested)  
-*This is the first loader I've seen, Golang or not, that works on the M1!*
+***This is the first loader I've seen, Golang or not, that works on the M1!***
 - OSX amd64     (tested)
 - Windows amd64 (tested)
 - Windows 386   (untested, should work)
