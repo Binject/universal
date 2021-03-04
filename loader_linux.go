@@ -8,6 +8,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/Binject/debug/elf"
+	"github.com/awgh/cppgo/asmcall/cdecl"
 )
 
 // LoadLibraryImpl - loads a single library to memory, without trying to check or load required imports
@@ -57,4 +58,14 @@ func LoadLibraryImpl(name string, image *[]byte) (*Library, error) {
 		Exports:     ex,
 	}
 	return &library, nil
+}
+
+// Call - call a function in a loaded library
+func (l *Library) Call(functionName string, args ...uintptr) (uintptr, error) {
+	proc, ok := l.FindProc(functionName)
+	if !ok {
+		return 0, errors.New("Call did not find export " + functionName)
+	}
+	val, err := cdecl.Call(proc, args...)
+	return val, err
 }

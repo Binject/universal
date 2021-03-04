@@ -122,6 +122,34 @@ func Test_Windows_gcc_3(t *testing.T) {
 	log.Println(r1, r2, errno)
 }
 
+func Test_Windows_gcc_4(t *testing.T) {
+
+	var image []byte
+	var err error
+
+	if PtrSize == 64 {
+		image, err = ioutil.ReadFile("test\\64\\main.dll")
+	} else {
+		image, err = ioutil.ReadFile("test\\32\\main.dll")
+	}
+
+	loader, err := NewLoader()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	library, err := loader.LoadLibrary("main", &image)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	val, err := library.Call("Runme", 7)
+	if err != nil {
+		t.Fatal(err)
+	}
+	log.Printf("%+v\n", val)
+}
+
 func Test_Windows_WrongArch_4(t *testing.T) {
 
 	var image []byte

@@ -2,6 +2,7 @@ package universal
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"unsafe"
 
@@ -40,18 +41,15 @@ func LoadLibraryImpl(name string, image *[]byte) (*Library, error) {
 	for i := 0; i < 10; i++ { // quit after the first ten images
 		ptr, err = findMacho(ptr, 0x1000)
 		if err != nil {
-			fmt.Println(err)
 			return nil, err
 		}
 		fmt.Printf("Found image at 0x%08x\n", ptr)
 		rawr := rawreader.New(ptr, MaxInt)
 		machoFile, err := macho.NewFileFromMemory(rawr)
 		if err != nil {
-			fmt.Println(err)
 			return nil, err
 		}
 		exports := machoFile.Exports()
-		fmt.Println(exports)
 
 		foundCreateObj := false
 		foundLinkModule := false
@@ -106,11 +104,9 @@ func LoadLibraryImpl(name string, image *[]byte) (*Library, error) {
 	rawr := rawreader.New(libPtr, MaxInt)
 	machoFile, err = macho.NewFileFromMemory(rawr)
 	if err != nil {
-		fmt.Println(err)
 		return nil, err
 	}
 	exports := machoFile.Exports()
-	fmt.Println(exports)
 	if err != nil {
 		return nil, err
 	}
@@ -121,7 +117,6 @@ func LoadLibraryImpl(name string, image *[]byte) (*Library, error) {
 	for _, x := range exports {
 		lib.Exports[x.Name] = uint64(x.VirtualAddress)
 	}
-
 	return &lib, nil
 }
 
@@ -175,4 +170,19 @@ func findMachoPtr(addr uintptr) (uintptr, error) {
 		ptr = uintptr(*(*uint64)(unsafe.Pointer(idx)))
 	}
 	return base, err
+}
+
+// Call - call a function in a loaded library
+func (l *Library) Call(functionName string, args ...uintptr) (uintptr, error) {
+
+	if len(functionName) > 0 && functionName[0] != '_' {
+		functionName = "_" + functionName
+	} // OSX has underscore-prefixed exports
+
+	proc, ok := l.FindProc(functionName)
+	if !ok {
+		return 0, errors.New("Call did not find export " + functionName)
+	}
+	val, err := cdecl.Call(proc, args...)
+	return val, err
 }

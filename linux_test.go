@@ -37,3 +37,23 @@ func Test_Linux_1(t *testing.T) {
 
 	log.Printf("%+v\n", val)
 }
+
+func Test_Linux_2(t *testing.T) {
+	image, err := ioutil.ReadFile("test/64/main.so")
+
+	loader, err := NewLoader()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	library, err := loader.LoadLibrary("main", &image)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	val, err := library.Call("Runme", 7)
+	if err != nil {
+		t.Fatal(err)
+	}
+	log.Printf("%+v\n", val)
+}
