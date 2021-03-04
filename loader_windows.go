@@ -4,9 +4,10 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
-	"fmt"
 	"os"
-	"syscall.Syscall"
+	"strconv"
+	"syscall"
+
 	"unsafe"
 
 	"github.com/Binject/debug/pe"
@@ -39,11 +40,11 @@ func LoadLibraryImpl(name string, image *[]byte) (*Library, error) {
 	} else {
 		sizeOfImage = pelib.OptionalHeader.(*pe.OptionalHeader32).SizeOfImage
 	}
-	r, err := virtualAlloc(0, sizeOfImage, MEM_RESERVE, syscall.Syscall.PAGE_READWRITE)
+	r, err := virtualAlloc(0, sizeOfImage, MEM_RESERVE, syscall.PAGE_READWRITE)
 	if err != nil {
 		return nil, err
 	}
-	dst, err := virtualAlloc(r, sizeOfImage, MEM_COMMIT, syscall.Syscall.PAGE_EXECUTE_READWRITE)
+	dst, err := virtualAlloc(r, sizeOfImage, MEM_COMMIT, syscall.PAGE_EXECUTE_READWRITE)
 	if err != nil {
 		return nil, err
 	}
@@ -85,7 +86,7 @@ func CopySections(pefile *pe.File, image *[]byte, loc uintptr) error {
 
 	// Copy Sections
 	for _, section := range pefile.Sections {
-		fmt.Println("Writing:", fmt.Sprintf("%s %x %x", section.Name, loc, uint32(loc)+section.VirtualAddress))
+		//fmt.Println("Writing:", fmt.Sprintf("%s %x %x", section.Name, loc, uint32(loc)+section.VirtualAddress))
 		if section.Size == 0 {
 			continue
 		}
@@ -115,7 +116,7 @@ func CopySections(pefile *pe.File, image *[]byte, loc uintptr) error {
 }
 
 var (
-	kernel32         = syscall.Syscall.MustLoadDLL("kernel32.dll")
+	kernel32         = syscall.MustLoadDLL("kernel32.dll")
 	procVirtualAlloc = kernel32.MustFindProc("VirtualAlloc")
 )
 
@@ -127,7 +128,7 @@ func virtualAlloc(addr uintptr, size, allocType, protect uint32) (uintptr, error
 		uintptr(protect))
 
 	if int(r1) == 0 {
-		return r1, os.Newsyscall.SyscallError("VirtualAlloc", e1)
+		return r1, os.NewSyscallError("VirtualAlloc", e1)
 	}
 	return r1, nil
 }
@@ -149,53 +150,56 @@ func (l *Library) Call(functionName string, args ...uintptr) (uintptr, error) {
 	if !ok {
 		return 0, errors.New("Call did not find export " + functionName)
 	}
-	var r, errno uintptr
+	var r uintptr
+	var errno syscall.Errno
 	var err error
 	switch len(args) {
 	case 0:
 		r, _, errno = syscall.Syscall(proc, uintptr(len(args)), 0, 0, 0)
 	case 1:
-		r, _, errno = syscall.Syscall(proc, uintptr(len(a)), args[0], 0, 0)
+		r, _, errno = syscall.Syscall(proc, uintptr(len(args)), args[0], 0, 0)
 	case 2:
-		r, _, errno = syscall.Syscall(proc, uintptr(len(a)), args[0], args[1], 0)
+		r, _, errno = syscall.Syscall(proc, uintptr(len(args)), args[0], args[1], 0)
 	case 3:
-		r, _, errno = syscall.Syscall(proc, uintptr(len(a)), args[0], args[1], args[2])
+		r, _, errno = syscall.Syscall(proc, uintptr(len(args)), args[0], args[1], args[2])
 	case 4:
-		r, _, errno = syscall.Syscall6(proc, uintptr(len(a)), args[0], args[1], args[2], args[3], 0, 0)
+		r, _, errno = syscall.Syscall6(proc, uintptr(len(args)), args[0], args[1], args[2], args[3], 0, 0)
 	case 5:
-		r, _, errno = syscall.Syscall6(proc, uintptr(len(a)), args[0], args[1], args[2], args[3], args[4], 0)
+		r, _, errno = syscall.Syscall6(proc, uintptr(len(args)), args[0], args[1], args[2], args[3], args[4], 0)
 	case 6:
-		r, _, errno = syscall.Syscall6(proc, uintptr(len(a)), args[0], args[1], args[2], args[3], args[4], args[5])
+		r, _, errno = syscall.Syscall6(proc, uintptr(len(args)), args[0], args[1], args[2], args[3], args[4], args[5])
 	case 7:
-		r, _, errno = syscall.Syscall9(proc, uintptr(len(a)), args[0], args[1], args[2], args[3], args[4], args[5], args[6], 0, 0)
+		r, _, errno = syscall.Syscall9(proc, uintptr(len(args)), args[0], args[1], args[2], args[3], args[4], args[5], args[6], 0, 0)
 	case 8:
-		r, _, errno = syscall.Syscall9(proc, uintptr(len(a)), args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], 0)
+		r, _, errno = syscall.Syscall9(proc, uintptr(len(args)), args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], 0)
 	case 9:
-		r, _, errno = syscall.Syscall9(proc, uintptr(len(a)), args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8])
+		r, _, errno = syscall.Syscall9(proc, uintptr(len(args)), args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8])
 	case 10:
-		r, _, errno = syscall.Syscall12(proc, uintptr(len(a)), args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], 0, 0)
+		r, _, errno = syscall.Syscall12(proc, uintptr(len(args)), args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], 0, 0)
 	case 11:
-		r, _, errno = syscall.Syscall12(proc, uintptr(len(a)), args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10], 0)
+		r, _, errno = syscall.Syscall12(proc, uintptr(len(args)), args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10], 0)
 	case 12:
-		r, _, errno = syscall.Syscall12(proc, uintptr(len(a)), args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10], args[11])
+		r, _, errno = syscall.Syscall12(proc, uintptr(len(args)), args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10], args[11])
 	case 13:
-		r, _, errno = syscall.Syscall15(proc, uintptr(len(a)), args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10], args[11], args[12], 0, 0)
+		r, _, errno = syscall.Syscall15(proc, uintptr(len(args)), args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10], args[11], args[12], 0, 0)
 	case 14:
-		r, _, errno = syscall.Syscall15(proc, uintptr(len(a)), args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10], args[11], args[12], args[13], 0)
+		r, _, errno = syscall.Syscall15(proc, uintptr(len(args)), args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10], args[11], args[12], args[13], 0)
 	case 15:
-		r, _, errno = syscall.Syscall15(proc, uintptr(len(a)), args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10], args[11], args[12], args[13], args[14])
+		r, _, errno = syscall.Syscall15(proc, uintptr(len(args)), args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10], args[11], args[12], args[13], args[14])
 	case 16:
-		r, _, errno = syscall.Syscall18(proc, uintptr(len(a)), args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10], args[11], args[12], args[13], args[14], args[15], 0, 0)
+		r, _, errno = syscall.Syscall18(proc, uintptr(len(args)), args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10], args[11], args[12], args[13], args[14], args[15], 0, 0)
 	case 17:
-		r, _, errno = syscall.Syscall18(proc, uintptr(len(a)), args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10], args[11], args[12], args[13], args[14], args[15], args[16], 0)
+		r, _, errno = syscall.Syscall18(proc, uintptr(len(args)), args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10], args[11], args[12], args[13], args[14], args[15], args[16], 0)
 	case 18:
-		r, _, errno = syscall.Syscall18(proc, uintptr(len(a)), args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10], args[11], args[12], args[13], args[14], args[15], args[16], args[17])
+		r, _, errno = syscall.Syscall18(proc, uintptr(len(args)), args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10], args[11], args[12], args[13], args[14], args[15], args[16], args[17])
 	default:
-		r, _, errno = 0, errors.New("Call "+functionName+" with too many arguments "+itoa(len(a))+".")
+		return 0, errors.New("Call " + functionName + " with too many arguments " + strconv.Itoa(len(args)) + ".")
 	}
 	if errno != 0 {
-		scerrno := errno.(*syscall.Errno)
-		err = scerrno.Error()
+		errString := errno.Error()
+		if errString != "" {
+			err = errors.New(errString)
+		}
 	}
 	return r, err
 }
