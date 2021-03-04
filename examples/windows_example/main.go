@@ -1,3 +1,5 @@
+// +build windows
+
 package main
 
 import (
@@ -11,7 +13,6 @@ import (
 const PtrSize = 32 << uintptr(^uintptr(0)>>63)
 
 func main() {
-
 	var image []byte
 	var err error
 
