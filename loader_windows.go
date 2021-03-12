@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"log"
 	"os"
 	"strconv"
 	"syscall"
@@ -11,6 +12,7 @@ import (
 	"unsafe"
 
 	"github.com/Binject/debug/pe"
+	"github.com/awgh/cppgo/asmcall/cdecl"
 )
 
 const (
@@ -52,6 +54,12 @@ func LoadLibraryImpl(name string, image *[]byte) (*Library, error) {
 	//perform base relocations
 	pelib.Relocate(uint64(dst), image)
 
+	// Update Import Address Table by reading PEB (currently implemented only on amd64)
+	err = UpdateIAT(pelib)
+	if err != nil {
+		return nil, err
+	}
+
 	//write to memory
 	CopySections(pelib, image, dst)
 
@@ -65,6 +73,7 @@ func LoadLibraryImpl(name string, image *[]byte) (*Library, error) {
 	}
 	for _, x := range exports {
 		lib.Exports[x.Name] = uint64(x.VirtualAddress)
+		log.Printf("%s->%s %x %x \n", lib.Name, x.Name, uint64(lib.BaseAddress)+uint64(x.VirtualAddress), x.VirtualAddress)
 	}
 
 	return &lib, nil
@@ -134,6 +143,16 @@ func virtualAlloc(addr uintptr, size, allocType, protect uint32) (uintptr, error
 }
 
 // Call - call a function in a loaded library
+func (l *Library) Call(functionName string, args ...uintptr) (uintptr, error) {
+	proc, ok := l.FindProc(functionName)
+	if !ok {
+		return 0, errors.New("Call did not find export " + functionName)
+	}
+	val, err := cdecl.Call(proc, args...)
+	return val, err
+}
+
+// CallSyscall - call a function in a loaded library
 //
 // cribbed from: https://golang.org/src/Syscall/dll_windows.go
 //
@@ -144,7 +163,7 @@ func virtualAlloc(addr uintptr, size, allocType, protect uint32) (uintptr, error
 // values are returned in r2. The return value for C type "float" is
 // math.Float32frombits(uint32(r2)). For C type "double", it is
 // math.Float64frombits(uint64(r2)).
-func (l *Library) Call(functionName string, args ...uintptr) (uintptr, error) {
+func (l *Library) CallSyscall(functionName string, args ...uintptr) (uintptr, error) {
 
 	proc, ok := l.FindProc(functionName)
 	if !ok {
