@@ -1,5 +1,5 @@
-github.com/Binject/debug v0.0.0-20210225042342-c9b8b45728d2 h1:8kQNJC9AxAaNs0JkXnWUfbNeDnIO1QLYYWjYqC6JEE4=
-github.com/Binject/debug v0.0.0-20210225042342-c9b8b45728d2/go.mod h1:QzgxDLY/qdKlvnbnb65eqTedhvQPbaSP2NqIbcuKvsQ=
+github.com/Binject/debug v0.0.0-20210312092933-6277045c2fdf h1:Cx4YJvjPZD91xiffqJOq8l3j1YKcvx3+8duqq7DX9gY=
+github.com/Binject/debug v0.0.0-20210312092933-6277045c2fdf/go.mod h1:QzgxDLY/qdKlvnbnb65eqTedhvQPbaSP2NqIbcuKvsQ=
 github.com/awgh/cppgo v0.0.0-20210224085512-3d24bca8edc0 h1:JjwxKkxzcBk4k8147g0eBQRCIy0UN1Be8AAv6RaIj4Q=
 github.com/awgh/cppgo v0.0.0-20210224085512-3d24bca8edc0/go.mod h1:IbERvuyb387Hppp8hX0SQTFt/mkej8+OhuS8L0nC2CI=
 github.com/awgh/rawreader v0.0.0-20200626064944-56820a9c6da4 h1:cIAK2NNf2yafdgpFRNJrgZMwvy61BEVpGoHc2n4/yWs=
